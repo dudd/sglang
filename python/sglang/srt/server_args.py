@@ -643,7 +643,7 @@ class ServerArgs:
     # For forward hooks
     forward_hooks: Optional[List[dict[str, Any]]] = None
 
-    def __post_init__(self):
+    def __post_init__(self):        # DDD: 实例化后，dataclass会自动调用__post_init__进行一些操作
         """
         Orchestrates the handling of various server arguments, ensuring proper configuration and validation.
         """
@@ -653,21 +653,21 @@ class ServerArgs:
             return
 
         # Handle deprecated arguments.
-        self._handle_deprecated_args()
+        self._handle_deprecated_args()              # DDD: 处理降级参数，主要是tool_call_parsers相关
 
         # Set missing default values.
-        self._handle_missing_default_values()
+        self._handle_missing_default_values()       # DDD: 处理没有默认值的参数，主要是分词器、设备和draft模型量化方法等
 
         # Handle device-specific backends.
-        self._handle_hpu_backends()
+        self._handle_hpu_backends()                 # DDD: Nvidia GPU不需要额外处理，其他设备需要设置特定attention_backend等
         self._handle_cpu_backends()
         self._handle_npu_backends()
 
         # Get GPU memory capacity, which is a common dependency for several configuration steps.
-        gpu_mem = get_device_memory_capacity(self.device)
+        gpu_mem = get_device_memory_capacity(self.device)       # DDD: 通过命令行获取GPU显存，取出所有GPU中最小的那个(正常都一样)，单位MB
 
         # Handle memory-related, chunked prefill, and CUDA graph batch size configurations.
-        self._handle_gpu_memory_settings(gpu_mem)
+        self._handle_gpu_memory_settings(gpu_mem)       # DDD: 重点，关于GPU显存的相关设置，主要chunked_prefill_size、cuda_graph_max_bs、mem_fraction_static
 
         # Apply model-specific adjustments.
         self._handle_model_specific_adjustments()
@@ -742,19 +742,19 @@ class ServerArgs:
             self.tool_call_parser = deprecated_tool_call_parsers[self.tool_call_parser]
 
     def _handle_missing_default_values(self):
-        if self.tokenizer_path is None:
+        if self.tokenizer_path is None:             
             self.tokenizer_path = self.model_path
         if self.served_model_name is None:
             self.served_model_name = self.model_path
         if self.device is None:
-            self.device = get_device()
+            self.device = get_device()                  # DDD: 通过cuda获取设备列表，并判断设备
         if self.random_seed is None:
             self.random_seed = random.randint(0, 1 << 30)
         if self.mm_process_config is None:
             self.mm_process_config = {}
 
         # Handle ModelScope model downloads
-        if get_bool_env_var("SGLANG_USE_MODELSCOPE"):
+        if get_bool_env_var("SGLANG_USE_MODELSCOPE"):   # DDD: 如果设置了SGLANG_USE_MODELSCOPE并且模型不存在，可以从魔搭社区直接下载模型。
             if not os.path.exists(self.model_path):
                 from modelscope import snapshot_download
 
@@ -825,7 +825,7 @@ class ServerArgs:
 
           The coefficient 1.5 is a heuristic value, in the future, we can do better estimation by looking at the model types, hidden sizes or even do a dummy run.
         """
-        if gpu_mem is not None:
+        if gpu_mem is not None:                   # DDD: 不同的GPU显存，chunked_prefill_size和cuda_graph_max_bs可以有所不同
             if gpu_mem < 20 * 1024:
                 # T4, 4080
                 # (chunked_prefill_size 2k, cuda_graph_max_bs 8)
@@ -892,7 +892,7 @@ class ServerArgs:
 
         # Set cuda graph batch sizes
         if self.cuda_graph_bs is None:
-            self.cuda_graph_bs = self._generate_cuda_graph_batch_sizes()
+            self.cuda_graph_bs = self._generate_cuda_graph_batch_sizes()    # DDD: 没指定cuda_graph_bs的话会根据cuda_graph_max_bs自动生成
         else:
             self.cuda_graph_max_bs = max(self.cuda_graph_bs)
 
@@ -914,7 +914,7 @@ class ServerArgs:
             # Some adjustments for large parallel size
             reserved_mem += self.tp_size * self.pp_size / 8 * 1024
 
-            if self.enable_dp_attention:
+            if self.enable_dp_attention:            # DDD: 开启DP要额外预留显存, DeepSeek-V3.2 DP=8，要预留 12288 + 6144 = 18432 MB.
                 # DP attention needs more padding for some operations
                 reserved_mem += self.cuda_graph_max_bs * self.dp_size * 3
 
@@ -949,12 +949,12 @@ class ServerArgs:
             # so we adjust the mem_fraction_static accordingly.
             model_config = self.get_model_config()
             if model_config.is_multimodal:
-                self.adjust_mem_fraction_for_vlm(model_config)
+                self.adjust_mem_fraction_for_vlm(model_config)      # DDD: 多模态模型需要更多内存。
 
     def _generate_cuda_graph_batch_sizes(self):
         """
         Generate the list of batch sizes for CUDA graph capture based on cuda_graph_max_bs.
-        This integrates the logic from cuda_graph_runner.py.
+        This 整合tegrates the logic from cuda_graph_runner.py.
         """
         # Handle disable_cuda_graph_padding as the first condition for both spec and non-spec
         if self.disable_cuda_graph_padding:
@@ -1006,8 +1006,8 @@ class ServerArgs:
         if parse_connector_type(self.model_path) == ConnectorType.INSTANCE:
             return
 
-        hf_config = self.get_model_config().hf_config
-        model_arch = hf_config.architectures[0]
+        hf_config = self.get_model_config().hf_config   # DDD: 通过modelscope或者transformers的AutoConfig获取模型相关配置。
+        model_arch = hf_config.architectures[0]         
 
         if model_arch in [
             "MistralLarge3ForCausalLM",
@@ -4445,8 +4445,8 @@ class ServerArgs:
         args.dp_size = args.data_parallel_size
         args.ep_size = args.expert_parallel_size
 
-        attrs = [attr.name for attr in dataclasses.fields(cls)]
-        return cls(**{attr: getattr(args, attr) for attr in attrs})
+        attrs = [attr.name for attr in dataclasses.fields(cls)]         # DDD: 获取ServerArgs所有列
+        return cls(**{attr: getattr(args, attr) for attr in attrs})     # DDD: 遍历ServerArgs，从args取得对应值，实例化ServerArgs对象。需要关注__post_init__方法，里面有很多操作。
 
     def url(self):
         if is_valid_ipv6_address(self.host):
@@ -4946,10 +4946,10 @@ def prepare_server_args(argv: List[str]) -> ServerArgs:
         argv = config_merger.merge_config_with_args(argv)
 
     parser = argparse.ArgumentParser()
-    ServerArgs.add_cli_args(parser)
-    raw_args = parser.parse_args(argv)
+    ServerArgs.add_cli_args(parser)                 # DDD: 给parser添加ServerArgs相关参数和默认值
+    raw_args = parser.parse_args(argv)              # DDD: 处理参数，主要是匹配参数
 
-    return ServerArgs.from_cli_args(raw_args)
+    return ServerArgs.from_cli_args(raw_args)       # DDD: 处理参数，返回ServerArgs对象
 
 
 ZMQ_TCP_PORT_DELTA = 233

@@ -161,7 +161,7 @@ def is_host_cpu_x86() -> bool:
 
 @lru_cache(maxsize=1)
 def is_cpu() -> bool:
-    return os.getenv("SGLANG_USE_CPU_ENGINE", "0") == "1" and is_host_cpu_x86()
+    return os.getenv("SGLANG_USE_CPU_ENGINE", "0") == "1" and is_host_cpu_x86()     # DDD: 使用cpu engine
 
 
 def is_float4_e2m1fn_x2(dtype) -> bool:
@@ -1819,7 +1819,7 @@ def is_habana_available() -> bool:
 
 @lru_cache(maxsize=8)
 def get_device(device_id: Optional[int] = None) -> str:
-    if is_cpu():
+    if is_cpu():        # DDD: 是否为cpu模式，读取环境变量SGLANG_USE_CPU_ENGINE
         if cpu_has_amx_support():
             logger.info("Intel AMX is detected, using CPU with Intel AMX support.")
         else:
@@ -1828,17 +1828,17 @@ def get_device(device_id: Optional[int] = None) -> str:
             )
         return "cpu"
 
-    if hasattr(torch, "cuda") and torch.cuda.is_available():
+    if hasattr(torch, "cuda") and torch.cuda.is_available():    # DDD: Nvidia GPU
         if device_id is None:
             return "cuda"
         return "cuda:{}".format(device_id)
 
-    if hasattr(torch, "xpu") and torch.xpu.is_available():
+    if hasattr(torch, "xpu") and torch.xpu.is_available():      # DDD: Indel GPU
         if device_id == None:
             return "xpu"
         return "xpu:{}".format(device_id)
 
-    if hasattr(torch, "npu") and torch.npu.is_available():
+    if hasattr(torch, "npu") and torch.npu.is_available():      # DDD: 华为HPU/NPU
         if device_id == None:
             return "npu"
         return "npu:{}".format(device_id)
