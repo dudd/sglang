@@ -133,15 +133,15 @@ class ModelRunnerKVCacheMixin:
         else:
             num_layers = self.num_effective_layers
 
-        cell_size = self.get_cell_size_per_token(num_layers)
+        cell_size = self.get_cell_size_per_token(num_layers)                # DDD: 根据num_layers计算cell_size，用于最后计算max_total_num_tokens
 
-        rest_memory = available_gpu_memory - total_gpu_memory * (
+        rest_memory = available_gpu_memory - total_gpu_memory * (           # DDD: 可用内存减去预留内存
             1 - self.mem_fraction_static
         )
         if self.mambaish_config is not None:
             rest_memory = self.handle_max_mamba_cache(rest_memory)
 
-        return int(rest_memory * (1 << 30)) // cell_size
+        return int(rest_memory * (1 << 30)) // cell_size                    # DDD: 剩余内存*GB/cell_size就是max_total_num_tokens
 
     def handle_max_mamba_cache(self: ModelRunner, total_rest_memory):
         config = self.mambaish_config
@@ -253,10 +253,10 @@ class ModelRunnerKVCacheMixin:
             f"Use sliding window memory pool. full_layer_tokens={self.full_max_total_num_tokens}, swa_layer_tokens={self.swa_max_total_num_tokens}"
         )
 
-    def init_memory_pool(self: ModelRunner, total_gpu_memory: int):
+    def init_memory_pool(self: ModelRunner, total_gpu_memory: int): 
         max_num_reqs = self.server_args.max_running_requests
         max_total_tokens = self.server_args.max_total_tokens
-        self.max_total_num_tokens = self.profile_max_num_token(total_gpu_memory)
+        self.max_total_num_tokens = self.profile_max_num_token(total_gpu_memory)       # DDD: 根据GPU显存计算最大token数max_total_num_tokens。
 
         if max_num_reqs is None:
             max_num_reqs = min(

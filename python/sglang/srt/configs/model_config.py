@@ -338,7 +338,7 @@ class ModelConfig:
 
     def _derive_context_length(self, context_length: int):
         is_draft_model = self.is_draft_model
-        derived_context_len = get_context_length(self.hf_text_config)
+        derived_context_len = get_context_length(self.hf_text_config)  # DDD: 从模型目录中的config.json文件中读取rope_scaling.factor和max_position_embeddings，两者相乘就是支持的最大长度
 
         if context_length is not None:
             if context_length > derived_context_len:

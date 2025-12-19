@@ -919,7 +919,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
 
         if self.server_args.kv_cache_dtype == "fp8_e4m3":
             if self.server_args.quantization_param_path is not None:
-                if callable(getattr(self.model, "load_kv_cache_scales", None)):
+                if callable(getattr(self.model, "load_kv_cache_scales", None)):     # DDD: DeepSeek类没有实现load_kv_cache_scales，所以DeepSeek3.2 kv_cache_dtype=fp8_e4m3时不能指定quantization_param_path。
                     self.model.load_kv_cache_scales(
                         self.server_args.quantization_param_path
                     )

@@ -26,7 +26,7 @@ def run_server(server_args):
 
 
 if __name__ == "__main__":
-    server_args = prepare_server_args(sys.argv[1:])
+    server_args = prepare_server_args(sys.argv[1:])         # DDD: 预处理输入参数，里面有很多操作
 
     try:
         run_server(server_args)

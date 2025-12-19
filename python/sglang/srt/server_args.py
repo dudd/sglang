@@ -173,7 +173,7 @@ RADIX_EVICTION_POLICY_CHOICES = ["lru", "lfu"]
 
 RL_ON_POLICY_TARGET_CHOICES = ["fsdp"]
 
-MOE_RUNNER_BACKEND_CHOICES = [
+MOE_RUNNER_BACKEND_CHOICES = [                                              # DDD: moe_runner_backend支持的后端
     "auto",
     "deep_gemm",
     "triton",
@@ -694,7 +694,7 @@ class ServerArgs:
     # For forward hooks
     forward_hooks: Optional[List[dict[str, Any]]] = None
 
-    def __post_init__(self):
+    def __post_init__(self):        # DDD: 实例化后，dataclass会自动调用__post_init__进行一些操作
         """
         Orchestrates the handling of various server arguments, ensuring proper configuration and validation.
         """
@@ -707,54 +707,54 @@ class ServerArgs:
             return
 
         # Handle deprecated arguments.
-        self._handle_deprecated_args()
+        self._handle_deprecated_args()              # DDD: 处理降级参数，主要是tool_call_parsers相关
 
         # Handle deprecated environment variables for prefill delayer.
         self._handle_prefill_delayer_env_compat()
 
         # Set missing default values.
-        self._handle_missing_default_values()
+        self._handle_missing_default_values()       # DDD: 处理没有默认值的参数，主要是分词器、设备和draft模型量化方法等
 
         # Handle device-specific backends.
-        self._handle_hpu_backends()
+        self._handle_hpu_backends()                 # DDD: Nvidia GPU不需要额外处理，其他设备需要设置特定attention_backend等
         self._handle_cpu_backends()
         self._handle_npu_backends()
 
         # Get GPU memory capacity, which is a common dependency for several configuration steps.
-        gpu_mem = get_device_memory_capacity(self.device)
+        gpu_mem = get_device_memory_capacity(self.device)     # DDD: 通过命令行获取GPU显存，取出所有GPU中最小的那个(正常都一样)，单位MB
 
         # Handle memory-related, chunked prefill, and CUDA graph batch size configurations.
-        self._handle_gpu_memory_settings(gpu_mem)
+        self._handle_gpu_memory_settings(gpu_mem)             # DDD: 重点，关于GPU显存的相关设置，主要chunked_prefill_size、cuda_graph_max_bs、mem_fraction_static
 
         # Apply model-specific adjustments.
-        self._handle_model_specific_adjustments()
+        self._handle_model_specific_adjustments()             # DDD: 模型相关调整，主要设置模型默认 attention_backend、dtype、page_size、kv_cache_dtype等。
 
         # Set kernel backends.
-        self._handle_sampling_backend()
-        self._handle_attention_backend_compatibility()
-        self._handle_kv4_compatibility()
-        self._handle_page_size()
-        self._handle_amd_specifics()
-        self._handle_grammar_backend()
+        self._handle_sampling_backend()                       # DDD: 处理采样后端设置，主要是sampling_backend, NVIDIA GPU默认使用flashinfer，其他设备默认使用pytorch。
+        self._handle_attention_backend_compatibility()        # DDD: 处理注意力后端兼容性，主要是attention_backend、prefill_attention_backend、decode_attention_backend的组合等。
+        self._handle_kv4_compatibility()                      # DDD: kv_cache_dtype=fp4_e2m1时处理KV4兼容性，主要是kv4_compatibility。
+        self._handle_page_size()                              # DDD: 如果此时page_size还为空，则设置为 1。
+        self._handle_amd_specifics()                          # DDD: 处理AMD特定设置triton_attention_num_kv_splits=16
+        self._handle_grammar_backend()                        # DDD: 如果此时grammar_backend还是空，则设置grammar_backend = "xgrammar"
 
         # Handle Hicache settings.
-        self._handle_hicache()
+        self._handle_hicache()                                # DDD: 处理Hicache设置, 主要是hicache_mem_layout、hicache_io_backend等。
 
         # Handle data parallelism.
-        self._handle_data_parallelism()
+        self._handle_data_parallelism()                       # DDD: 处理DP，如果dp_size是1，则关闭enable_dp_attention。如果启用enable_dp_attention，则重新设置schedule_conservativeness和chunked_prefill_size
 
         # Handle MoE configurations.
-        self._handle_moe_kernel_config()
-        self._handle_a2a_moe()
-        self._handle_eplb_and_dispatch()
-        self._handle_expert_distribution_metrics()
-        self._handle_elastic_ep()
+        self._handle_moe_kernel_config()                      # DDD: 处理moe_runner_backend和quantization的兼容性
+        self._handle_a2a_moe()                                # DDD: 只要开启moe_a2a_backend，ep_size就强制设置成tp_size
+        self._handle_eplb_and_dispatch()                      # DDD: 启用EPLB，ep_size必须大于1，设置ep_dispatch_algorithm、expert_distribution_recorder_mode默认值
+        self._handle_expert_distribution_metrics()            # DDD: 设置expert_distribution_recorder_mode和expert_distribution_recorder_buffer_size默认值
+        self._handle_elastic_ep()                             # DDD: 启用elastic_ep_backend和enable_eplb后对eplb_algorithm进行设置和判断。
 
         # Handle pipeline parallelism.
-        self._handle_pipeline_parallelism()
+        self._handle_pipeline_parallelism()                   # DDD: 启用pp则关闭overlap schedule，因为不支持
 
         # Handle speculative decoding logic.
-        self._handle_speculative_decoding()
+        self._handle_speculative_decoding()                   # DDD: 做一些spec算法和模型以及后端的一些检查和设置。
 
         # Handle model loading format.
         self._handle_load_format()
@@ -834,19 +834,19 @@ class ServerArgs:
             self.prefill_delayer_token_usage_low_watermark = x
 
     def _handle_missing_default_values(self):
-        if self.tokenizer_path is None:
+        if self.tokenizer_path is None:             
             self.tokenizer_path = self.model_path
         if self.served_model_name is None:
             self.served_model_name = self.model_path
         if self.device is None:
-            self.device = get_device()
+            self.device = get_device()                  # DDD: 通过cuda获取设备列表，并判断设备
         if self.random_seed is None:
             self.random_seed = random.randint(0, 1 << 30)
         if self.mm_process_config is None:
             self.mm_process_config = {}
 
         # Handle ModelScope model downloads
-        if get_bool_env_var("SGLANG_USE_MODELSCOPE"):
+        if get_bool_env_var("SGLANG_USE_MODELSCOPE"):   # DDD: 如果设置了SGLANG_USE_MODELSCOPE并且模型不存在，可以从魔搭社区直接下载模型。
             if not os.path.exists(self.model_path):
                 from modelscope import snapshot_download
 
@@ -917,7 +917,7 @@ class ServerArgs:
 
           The coefficient 1.5 is a heuristic value, in the future, we can do better estimation by looking at the model types, hidden sizes or even do a dummy run.
         """
-        if gpu_mem is not None:
+        if gpu_mem is not None:                   # DDD: 不同的GPU显存，chunked_prefill_size和cuda_graph_max_bs可以有所不同
             if gpu_mem < 20 * 1024:
                 # T4, 4080
                 # (chunked_prefill_size 2k, cuda_graph_max_bs 8)
@@ -984,7 +984,7 @@ class ServerArgs:
 
         # Set cuda graph batch sizes
         if self.cuda_graph_bs is None:
-            self.cuda_graph_bs = self._generate_cuda_graph_batch_sizes()
+            self.cuda_graph_bs = self._generate_cuda_graph_batch_sizes()    # DDD: 没指定cuda_graph_bs的话会根据cuda_graph_max_bs自动生成
         else:
             self.cuda_graph_max_bs = max(self.cuda_graph_bs)
 
@@ -1015,7 +1015,7 @@ class ServerArgs:
             # Some adjustments for large parallel size
             reserved_mem += self.tp_size * self.pp_size / 8 * 1024
 
-            if self.enable_dp_attention:
+            if self.enable_dp_attention:            # DDD: 开启DP要额外预留显存, DeepSeek-V3.2 DP=8，要预留 12288 + 6144 = 18432 MB.
                 # DP attention needs more padding for some operations
                 reserved_mem += self.cuda_graph_max_bs * self.dp_size * 3
 
@@ -1067,7 +1067,7 @@ class ServerArgs:
     def _generate_cuda_graph_batch_sizes(self):
         """
         Generate the list of batch sizes for CUDA graph capture based on cuda_graph_max_bs.
-        This integrates the logic from cuda_graph_runner.py.
+        This 整合tegrates the logic from cuda_graph_runner.py.
         """
         # Handle disable_cuda_graph_padding as the first condition for both spec and non-spec
         if self.disable_cuda_graph_padding:
@@ -1173,8 +1173,8 @@ class ServerArgs:
         if parse_connector_type(self.model_path) == ConnectorType.INSTANCE:
             return
 
-        hf_config = self.get_model_config().hf_config
-        model_arch = hf_config.architectures[0]
+        hf_config = self.get_model_config().hf_config   # DDD: hf_config是通过modelscope或者transformers的AutoConfig.get_config获取模型相关配置。
+        model_arch = hf_config.architectures[0]         # DDD: 模型架构，DeepSeek-V3.2的模型架构为DeepseekV3ForCausalLM。        
 
         if model_arch in [
             "MistralLarge3ForCausalLM",
@@ -1190,7 +1190,7 @@ class ServerArgs:
         ]:
             # Set attention backend for DeepSeek
             if is_deepseek_nsa(hf_config):  # DeepSeek 3.2
-                if self.is_attention_backend_not_set():
+                if self.is_attention_backend_not_set():     # DDD: 如果DeepSeek 3.2未指定注意力后端，则使用nsa注意力后端。
                     self.attention_backend = "nsa"
                     logger.info("Use nsa attention backend for DeepSeek with DSA.")
 
@@ -1256,7 +1256,7 @@ class ServerArgs:
                 if self.enable_piecewise_cuda_graph:
                     logger.info("Piecewise CUDA graph is enabled, use MLA for prefill.")
 
-                if is_sm100_supported():
+                if is_sm100_supported():        # DDD: 如果GPU架构为SM100(Blackwell)，则使用trtllm_mla注意力后端。
                     if (
                         self.attention_backend is None
                         and self.prefill_attention_backend is None
@@ -1315,11 +1315,11 @@ class ServerArgs:
         elif model_arch in ["GptOssForCausalLM"]:
             # Set attention backend for GPT-OSS
             if self.is_attention_backend_not_set():
-                if is_sm100_supported():
+                if is_sm100_supported():        # DDD: 如果GPU架构为SM100(Blackwell)，则使用trtllm_mha注意力后端。
                     self.attention_backend = "trtllm_mha"
-                elif is_sm90_supported():
+                elif is_sm90_supported():        # DDD: 如果GPU架构为SM90(Hopper)，则使用fa3注意力后端。
                     self.attention_backend = "fa3"
-                else:
+                else:                            # DDD: 如果GPU架构为其他，则使用triton注意力后端。
                     self.attention_backend = "triton"
 
             supported_backends = ["triton", "trtllm_mha", "fa3", "fa4", "ascend"]
@@ -1355,7 +1355,7 @@ class ServerArgs:
                     logger.warning(
                         "Enable piecewise CUDA graph, enabling auto MOE kernel."
                     )
-                elif is_blackwell_supported() and is_mxfp4_quant_format:
+                elif is_blackwell_supported() and is_mxfp4_quant_format:        # DDD: 如果GPU架构为SM100、SM120(Blackwell)，并且量化格式为MXFP4，则使用flashinfer_mxfp4注意力后端。
                     self.moe_runner_backend = "flashinfer_mxfp4"
                     logger.warning(
                         "Detected SM100 and MXFP4 quantization format for GPT-OSS model, enabling FlashInfer MXFP4 MOE kernel."
@@ -1703,12 +1703,12 @@ class ServerArgs:
 
     def _handle_attention_backend_compatibility(self):
         model_config = self.get_model_config()
-        use_mla_backend = self.use_mla_backend()
+        use_mla_backend = self.use_mla_backend()        # DDD: DeepSeek-V3.2是 MLA
 
         if self.prefill_attention_backend is not None and (
             self.prefill_attention_backend == self.decode_attention_backend
         ):  # override the default attention backend
-            self.attention_backend = self.prefill_attention_backend
+            self.attention_backend = self.prefill_attention_backend     # DDD: 如果指定了prefill_attention_backend和decode_attention_backend并且两者值一样，则覆盖指定的attention_backend的值
 
         # Pick the default attention backend if not specified
         if self.attention_backend is None:
@@ -1749,12 +1749,12 @@ class ServerArgs:
                         "flashinfer" if is_flashinfer_available() else "triton"
                     )
             else:
-                # MLA architecture
+                # MLA architecture              # DDD: H系列显卡默认用 FA3，B系列显卡默认用 Flashinfer，其他的用 triton
                 if is_hopper_with_cuda_12_3():
                     self.attention_backend = "fa3"
                 elif is_sm100_supported():
                     self.attention_backend = "flashinfer"
-                elif is_hip():
+                elif is_hip():                  # DDD: AMD GPU根据 Head 数量分别使用aiter和triton
                     head_num = model_config.get_num_kv_heads(self.tp_size)
                     # TODO current aiter only support head number 16 or 128 head number
                     if head_num == 128 or head_num == 16:
@@ -1769,13 +1769,13 @@ class ServerArgs:
             )
 
         # Torch native and flex attention backends
-        if self.attention_backend == "torch_native":
+        if self.attention_backend == "torch_native":        # DDD: torch_native后端不支持 cuda graph
             logger.warning(
                 "Cuda graph is disabled because of using torch native attention backend"
             )
             self.disable_cuda_graph = True
 
-        if self.attention_backend == "flex_attention":
+        if self.attention_backend == "flex_attention":      # DDD: flex_attention后端不支持cuda graph和 speculative
             logger.warning(
                 "Cuda graph is disabled because of using torch Flex Attention backend"
             )
@@ -1792,7 +1792,7 @@ class ServerArgs:
             logger.warning(
                 "FlashMLA only supports a page_size of 64, change page_size to 64."
             )
-            self.page_size = 64
+            self.page_size = 64             # DDD: flashmla后端支持page_size=64
 
         if (
             self.attention_backend == "cutlass_mla"
@@ -1801,13 +1801,13 @@ class ServerArgs:
             logger.warning(
                 "Cutlass MLA only supports a page_size of 128, change page_size to 128."
             )
-            self.page_size = 128
+            self.page_size = 128            # DDD: cutlass_mla后端支持page_size=128
 
         if (
             self.attention_backend == "trtllm_mla"
             or self.decode_attention_backend == "trtllm_mla"
         ):
-            if not is_blackwell_supported():
+            if not is_blackwell_supported():    # DDD: trtllm_mla后端只支持运行在B系列卡上
                 raise ValueError(
                     "TRTLLM MLA backend is only supported on Blackwell GPUs (SM100). Please use a different backend."
                 )
@@ -1828,7 +1828,7 @@ class ServerArgs:
             or self.decode_attention_backend == "trtllm_mha"
             or self.prefill_attention_backend == "trtllm_mha"
         ):
-            if not is_sm100_supported():
+            if not is_sm100_supported():    # DDD: trtllm_mha后端只支持运行在B系列卡上
                 raise ValueError(
                     "TRTLLM MHA backend is only supported on Blackwell GPUs (SM100). Please use a different backend."
                 )
@@ -1844,7 +1844,7 @@ class ServerArgs:
                 "FlashAttention3 only supports fp8_e4m3 if using FP8; "
                 "Setting attention backend to triton."
             )
-            self.attention_backend = "triton"
+            self.attention_backend = "triton"   # DDD: fa3后端只支持fp8_e4m3，如果用fp8_e5m2，后端需要用triton
 
         if self.prefill_attention_backend == "fa4" and not self.use_mla_backend():
             logger.warning(
@@ -1852,7 +1852,7 @@ class ServerArgs:
             )
             self.page_size = 128
 
-        # AMD platforms backends
+        # AMD platforms backends            # DDD: AMD 平台后端的一些设置
         if self.attention_backend == "aiter":
             if model_config.context_len > 8192:
                 self.mem_fraction_static *= 0.85
@@ -1907,7 +1907,7 @@ class ServerArgs:
 
     def _handle_kv4_compatibility(self):
         """Check FP4 KV cache compatibility with the attention backend"""
-        if self.kv_cache_dtype != "fp4_e2m1":
+        if self.kv_cache_dtype != "fp4_e2m1":       # DDD: 只处理kv_cache_dtype是fp4_e2m1的情况
             return
 
         use_mla_backend = self.use_mla_backend()
@@ -1997,11 +1997,11 @@ class ServerArgs:
             self.grammar_backend = "xgrammar"
 
     def _handle_data_parallelism(self):
-        if self.dp_size == 1:
+        if self.dp_size == 1:           # DDD: 如果dp_size是1, enable_dp_attention设置为 False
             self.enable_dp_attention = False
             self.enable_dp_lm_head = False
 
-        if self.enable_dp_attention:
+        if self.enable_dp_attention:    # DDD: 如果启用enable_dp_attention：1、tp_size要是dp_size的倍数，2、chunked_prefill_size要除以/dp_size，3、schedule_conservativeness * 0.3
             self.schedule_conservativeness = self.schedule_conservativeness * 0.3
             assert self.tp_size % self.dp_size == 0
             self.chunked_prefill_size = self.chunked_prefill_size // self.dp_size
@@ -2065,7 +2065,7 @@ class ServerArgs:
             ), "FP8/MXFP8 Cutlass MoE is only supported with ep_size == 1"
 
     def _handle_a2a_moe(self):
-        if self.moe_a2a_backend == "deepep":
+        if self.moe_a2a_backend == "deepep":        # DDD: moe_a2a_backend=deepep时，ep_size设置为tp_size
             if self.deepep_mode == "normal":
                 logger.warning("Cuda graph is disabled because deepep_mode=`normal`")
                 self.disable_cuda_graph = True
@@ -2127,7 +2127,7 @@ class ServerArgs:
         if (self.enable_eplb or (self.init_expert_location != "trivial")) and (
             self.ep_dispatch_algorithm is None
         ):
-            self.ep_dispatch_algorithm = "static"
+            self.ep_dispatch_algorithm = "static"           # DDD: 启用 EPLB，ep_dispatch_algorithm默认设为 static
 
         if self.enable_eplb:
             assert self.ep_size > 1
@@ -2145,9 +2145,9 @@ class ServerArgs:
         if self.enable_expert_distribution_metrics and (
             self.expert_distribution_recorder_mode is None
         ):
-            self.expert_distribution_recorder_mode = "stat"
+            self.expert_distribution_recorder_mode = "stat"             # DDD: 设置专家记录模式默认为stat
 
-        if self.expert_distribution_recorder_buffer_size is None:
+        if self.expert_distribution_recorder_buffer_size is None:       # DDD: 设置滑动平均 buffer
             if (x := self.eplb_rebalance_num_iterations) is not None:
                 self.expert_distribution_recorder_buffer_size = x
             elif self.expert_distribution_recorder_mode is not None:
@@ -2165,7 +2165,7 @@ class ServerArgs:
             self.hicache_mem_layout == "page_first_direct"
             and self.hicache_io_backend == "kernel"
         ):
-            self.hicache_io_backend = "direct"
+            self.hicache_io_backend = "direct"      # DDD: io_backend 为 kernel 不支持 mem_layout=page_first_direct，强制转成io_backend=direct。
             logger.warning(
                 "Kernel io backend does not support page first direct layout"
             )
@@ -2183,7 +2183,7 @@ class ServerArgs:
                 else self.attention_backend
             )
             if effective_decode_backend == "fa3":
-                if self.decode_attention_backend is None:
+                if self.decode_attention_backend is None:       # DDD: 如果启用分层缓存，并未有效的后端是 fa3的情况下，如果没有设置decode_attention_backend，则根据情况设置为flashinfer或者 triton
                     # If decode backend wasn't explicitly set, pick a safe default that works with HiCache kernel IO.
                     if not self.use_mla_backend():
                         self.decode_attention_backend = (
@@ -2193,7 +2193,7 @@ class ServerArgs:
                         self.decode_attention_backend = (
                             "flashinfer" if is_sm100_supported() else "triton"
                         )
-                else:
+                else:             # DDD: decode_attention_backend=fa3与Hicache不兼容，需设置 io_backend 为 direct
                     # If user explicitly requested FA3 decode, fall back to direct IO.
                     self.hicache_io_backend = "direct"
                     logger.warning(
@@ -2201,7 +2201,7 @@ class ServerArgs:
                         "Setting hicache_io_backend to vanilla I/O, which may lead to suboptimal performance with small page sizes."
                     )
 
-        if self.hicache_storage_backend == "mooncake":
+        if self.hicache_storage_backend == "mooncake":          # DDD: 月之暗面的存储后端的一些限制
             if self.hicache_mem_layout == "layer_first":
                 if self.hicache_io_backend == "direct":
                     self.hicache_mem_layout = "page_first_direct"
@@ -2240,12 +2240,12 @@ class ServerArgs:
         if self.speculative_algorithm in ("EAGLE", "EAGLE3", "STANDALONE"):
             if self.speculative_algorithm == "STANDALONE" and self.enable_dp_attention:
                 # TODO: support dp attention for standalone speculative decoding
-                raise ValueError(
+                raise ValueError(           # DDD: speculative_algorithm=STANDALONE不支持enable_dp_attention
                     "Currently standalone speculative decoding does not support dp attention."
                 )
 
             if self.max_running_requests is None:
-                self.max_running_requests = 48
+                self.max_running_requests = 48  # DDD: 推测解码默认设置max_running_requests=48，可指定--max-running-requests进行覆盖
                 logger.warning(
                     "Max running requests is reset to 48 for speculative decoding. You can override this by explicitly setting --max-running-requests."
                 )
@@ -2255,14 +2255,14 @@ class ServerArgs:
                 and envs.SGLANG_ENABLE_SPEC_V2.get()
             ):
                 self.disable_overlap_schedule = False
-                logger.warning(
+                logger.warning(                 # DDD: Spec v2和overlap schedule同时开启
                     "Spec v2 is enabled for eagle/eagle3 speculative decoding and overlap schedule is turned on."
                 )
                 if (
                     self.speculative_eagle_topk is not None
                     and self.speculative_eagle_topk > 1
                 ):
-                    raise ValueError(
+                    raise ValueError(           # DDD: Spec v2只支持topk为1的情况
                         "Spec v2 currently only supports topk = 1 for speculative decoding."
                     )
             else:
@@ -2272,7 +2272,7 @@ class ServerArgs:
                     "You can set env SGLANG_ENABLE_SPEC_V2=True to enable the experimental overlap scheduler. "
                 )
 
-            if self.enable_mixed_chunk:
+            if self.enable_mixed_chunk:         # DDD: 不能开启enable_mixed_chunk
                 self.enable_mixed_chunk = False
                 logger.warning(
                     "Mixed chunked prefill is disabled because of using "
@@ -2290,7 +2290,7 @@ class ServerArgs:
                 "MistralLarge3ForCausalLM",
                 "PixtralForConditionalGeneration",
             ]:
-                if self.speculative_draft_model_path is None:
+                if self.speculative_draft_model_path is None:       # DDD: 如果是DeepSeek-V3.2，并且没有指定草稿模型路径，则设置成模型路径。因为DeepSeek MTP不需要设置speculative_draft_model_path
                     self.speculative_draft_model_path = self.model_path
                     self.speculative_draft_model_revision = self.revision
                 else:
@@ -2302,7 +2302,7 @@ class ServerArgs:
                             "DeepSeek MTP does not require setting speculative_draft_model_path."
                         )
 
-            if self.speculative_num_steps is None:
+            if self.speculative_num_steps is None:      # DDD: 未指定 MTP 参数，则自动设置默认值
                 assert (
                     self.speculative_eagle_topk is None
                     and self.speculative_num_draft_tokens is None
@@ -2319,7 +2319,7 @@ class ServerArgs:
                 or self.prefill_attention_backend == "trtllm_mha"
             ):
                 if self.speculative_eagle_topk > 1:
-                    raise ValueError(
+                    raise ValueError(       # DDD: trtllm_mha后端只支持topk = 1
                         "trtllm_mha backend only supports topk = 1 for speculative decoding."
                     )
 
@@ -2327,7 +2327,7 @@ class ServerArgs:
                 self.speculative_eagle_topk == 1
                 and self.speculative_num_draft_tokens != self.speculative_num_steps + 1
             ):
-                logger.warning(
+                logger.warning(     # DDD: topk=1时，num_draft_tokens=num_steps + 1
                     "speculative_num_draft_tokens is adjusted to speculative_num_steps + 1 when speculative_eagle_topk == 1"
                 )
                 self.speculative_num_draft_tokens = self.speculative_num_steps + 1
@@ -2341,7 +2341,7 @@ class ServerArgs:
                     "speculative_eagle_topk > 1 with page_size > 1 is unstable and produces incorrect results for paged attention backends. This combination is only supported for the 'flashinfer' backend."
                 )
 
-        if self.speculative_algorithm == "NGRAM":
+        if self.speculative_algorithm == "NGRAM":       # DDD: todo 尝试这个算法
             if not self.device.startswith("cuda"):
                 raise ValueError(
                     "Ngram speculative decoding only supports CUDA device."
@@ -4338,7 +4338,7 @@ class ServerArgs:
             help="Disable the overlap scheduler, which overlaps the CPU scheduler with GPU model worker.",
         )
         parser.add_argument(
-            "--enable-mixed-chunk",
+            "--enable-mixed-chunk",             # DDD: 在一个forward batch中可以同时执行 prefill和 decode，在speculative_algorithm为eagle2/3时不可用。
             action="store_true",
             help="Enabling mixing prefill and decode in a batch when using chunked prefill.",
         )
@@ -4854,8 +4854,8 @@ class ServerArgs:
         args.dp_size = args.data_parallel_size
         args.ep_size = args.expert_parallel_size
 
-        attrs = [attr.name for attr in dataclasses.fields(cls)]
-        return cls(**{attr: getattr(args, attr) for attr in attrs})
+        attrs = [attr.name for attr in dataclasses.fields(cls)]         # DDD: 获取ServerArgs所有列
+        return cls(**{attr: getattr(args, attr) for attr in attrs})     # DDD: 遍历ServerArgs，从args取得对应值，实例化ServerArgs对象。需要关注__post_init__方法，里面有很多操作。
 
     def url(self):
         if is_valid_ipv6_address(self.host):
@@ -4889,7 +4889,7 @@ class ServerArgs:
         from sglang.srt.configs.model_config import AttentionArch
 
         model_config = self.get_model_config()
-        return model_config.attention_arch == AttentionArch.MLA
+        return model_config.attention_arch == AttentionArch.MLA         # DDD: DeepSeek-V3.2是 MLA
 
     def is_attention_backend_not_set(self):
         return (
@@ -5368,8 +5368,8 @@ def prepare_server_args(argv: List[str]) -> ServerArgs:
         config_merger = ConfigArgumentMerger(parser)
         argv = config_merger.merge_config_with_args(argv)
 
-    raw_args = parser.parse_args(argv)
-    return ServerArgs.from_cli_args(raw_args)
+    raw_args = parser.parse_args(argv)              # DDD: 处理参数，主要是匹配参数
+    return ServerArgs.from_cli_args(raw_args)       # DDD: 处理参数，返回ServerArgs对象
 
 
 ZMQ_TCP_PORT_DELTA = 233

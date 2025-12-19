@@ -183,7 +183,7 @@ def is_host_cpu_arm64() -> bool:
 @lru_cache(maxsize=1)
 def is_cpu() -> bool:
     is_host_cpu_supported = is_host_cpu_x86() or is_host_cpu_arm64()
-    return os.getenv("SGLANG_USE_CPU_ENGINE", "0") == "1" and is_host_cpu_supported
+    return os.getenv("SGLANG_USE_CPU_ENGINE", "0") == "1" and is_host_cpu_supported     # DDD: 使用cpu engine
 
 
 @lru_cache(maxsize=1)
@@ -242,19 +242,19 @@ is_hopper_with_cuda_12_3 = lru_cache(maxsize=1)(
         _check_cuda_device_version, device_capability_majors=[9], cuda_version=(12, 3)
     )
 )
-is_blackwell_supported = is_blackwell = lru_cache(maxsize=1)(
+is_blackwell_supported = is_blackwell = lru_cache(maxsize=1)(         # DDD: 如果GPU架构为SM100、SM120(Blackwell)，则返回True。
     partial(
         _check_cuda_device_version,
         device_capability_majors=[10, 12],
         cuda_version=(12, 8),
     )
 )
-is_sm120_supported = lru_cache(maxsize=1)(
+is_sm120_supported = lru_cache(maxsize=1)(          # DDD: 如果GPU架构为SM120(Blackwell B200/GB200/B300)，则返回True。
     partial(
         _check_cuda_device_version, device_capability_majors=[12], cuda_version=(12, 8)
     )
 )
-is_sm100_supported = lru_cache(maxsize=1)(
+is_sm100_supported = lru_cache(maxsize=1)(           # DDD: 如果GPU架构为SM100(Blackwell)，则返回True。
     partial(
         _check_cuda_device_version, device_capability_majors=[10], cuda_version=(12, 8)
     )
@@ -1984,7 +1984,7 @@ def is_habana_available() -> bool:
 
 @lru_cache(maxsize=8)
 def get_device(device_id: Optional[int] = None) -> str:
-    if is_cpu():
+    if is_cpu():        # DDD: 是否为cpu模式，读取环境变量SGLANG_USE_CPU_ENGINE
         if cpu_has_amx_support():
             logger.info("Intel AMX is detected, using CPU with Intel AMX support.")
         else:
@@ -1993,17 +1993,17 @@ def get_device(device_id: Optional[int] = None) -> str:
             )
         return "cpu"
 
-    if hasattr(torch, "cuda") and torch.cuda.is_available():
+    if hasattr(torch, "cuda") and torch.cuda.is_available():    # DDD: Nvidia GPU
         if device_id is None:
             return "cuda"
         return "cuda:{}".format(device_id)
 
-    if hasattr(torch, "xpu") and torch.xpu.is_available():
+    if hasattr(torch, "xpu") and torch.xpu.is_available():      # DDD: Indel GPU
         if device_id == None:
             return "xpu"
         return "xpu:{}".format(device_id)
 
-    if is_npu():
+    if is_npu():      # DDD: 华为HPU/NPU
         if device_id == None:
             return "npu"
         return "npu:{}".format(device_id)

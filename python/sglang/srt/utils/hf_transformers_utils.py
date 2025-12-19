@@ -440,12 +440,12 @@ CONTEXT_LENGTH_KEYS = [
 ]
 
 
-def get_context_length(config):
+def get_context_length(config):             
     """Get the context length of a model from a huggingface model configs."""
     text_config = config
-    rope_scaling = getattr(text_config, "rope_scaling", None)
+    rope_scaling = getattr(text_config, "rope_scaling", None)       
     if rope_scaling:
-        rope_scaling_factor = rope_scaling.get("factor", 1)
+        rope_scaling_factor = rope_scaling.get("factor", 1)         # DDD: 模型config.json中的rope_scaling.factor
         if "original_max_position_embeddings" in rope_scaling:
             rope_scaling_factor = 1
         if rope_scaling.get("rope_type", None) == "llama3":
@@ -454,9 +454,9 @@ def get_context_length(config):
         rope_scaling_factor = 1
 
     for key in CONTEXT_LENGTH_KEYS:
-        val = getattr(text_config, key, None)
+        val = getattr(text_config, key, None)                       # DDD: 模型config.json中max_sequence_length、seq_length、max_seq_len、model_max_length、max_position_embeddings的某个值。
         if val is not None:
-            return int(rope_scaling_factor * val)
+            return int(rope_scaling_factor * val)                   # DDD: DeepSeekV3.2为例，就是config.json中，rope_scaling.factor*max_position_embeddings
     return 2048
 
 
